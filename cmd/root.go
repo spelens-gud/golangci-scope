@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/x/exp/charmtone"
 	"github.com/charmbracelet/x/term"
 	"github.com/spelens-gud/assert"
+	"github.com/spelens-gud/golangci-scope/internal/app"
 	termutil "github.com/spelens-gud/golangci-scope/internal/term"
 	"github.com/spelens-gud/golangci-scope/internal/version"
 	"github.com/spf13/cobra"
@@ -88,6 +89,9 @@ func init() {
 	// when this action is called directly.
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "run programe in debug mode")
 	rootCmd.PersistentFlags().StringVar(&debugInCISyncFile, "debugcisyncfile", "", "ci sync file")
+	rootCmd.PersistentFlags().StringVar(&cwd, "cwd", "", "Current working directory")
+	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", "", "Custom crush data directory")
+	rootCmd.Flags().BoolVar(&help, "help", false, "Help")
 	assert.MustCall1E(viper.BindPFlags, rootCmd.PersistentFlags(), "viper 隐藏失败")
 }
 func setupAppWithProgressBar(cmd *cobra.Command) error {
@@ -97,4 +101,8 @@ func setupAppWithProgressBar(cmd *cobra.Command) error {
 	}
 
 	return nil
+}
+
+func setupApp(cmd *cobra.Command) (*app.App, error) {
+	return app.New(cmd.Context(), nil, nil)
 }
