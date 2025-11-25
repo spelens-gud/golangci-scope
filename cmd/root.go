@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
@@ -17,9 +18,9 @@ import (
 	"github.com/charmbracelet/x/exp/charmtone"
 	"github.com/charmbracelet/x/term"
 	"github.com/spelens-gud/assert"
-	"github.com/spelens-gud/golangci-scope/internal/app"
 	termutil "github.com/spelens-gud/golangci-scope/internal/term"
 	"github.com/spelens-gud/golangci-scope/internal/version"
+	"github.com/spelens-gud/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -37,14 +38,62 @@ to quickly create a Cobra application.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
+	// PersistentPreRun 运行前执行
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		// 创建 Node 服务专用的 viper 实例
+		rootViper = viper.New()
+
+		assert.Then(configFile != "").Do(func() {
+			// 使用命令行指定的配置文件
+			rootViper.SetConfigFile(configFile)
+		}).Else(func() {
+			// 查找主目录
+			home := assert.MustCall0RE(os.UserHomeDir, "获取用户主目录失败")
+			rootViper.AddConfigPath(home)
+			rootViper.AddConfigPath(".")
+			rootViper.AddConfigPath("./config")
+			rootViper.SetConfigType("yaml")
+			rootViper.SetConfigName("default")
+		})
+
+		// 读取环境变量
+		rootViper.AutomaticEnv()
+
+		// 读取配置文件
+		assert.MustCall0E(rootViper.ReadInConfig, "读取配置文件失败")
+
+		fmt.Fprintf(os.Stderr, "使用配置文件: %s\n", rootViper.ConfigFileUsed())
+	},
+	// RunE 运行
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// 创建日志实例
+		logConfig := logger.LoadConfigFromViper(rootViper)
+		setupDebug(logConfig)
+		assert.MustCall1E(logger.InitDefault, logConfig, "创建日志实例失败")
+		assert.SetLogger(logger.GetDefault())
+		defer logger.GetDefault().Sync()
+
 		err := setupAppWithProgressBar(cmd)
 		if err != nil {
 			return err
 		}
 		return err
 	},
+	// PersistentPostRun 运行后执行
+	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+		if debugInCISyncFile != "" {
+			f, err := os.Create(debugInCISyncFile)
+			if err != nil {
+				logger.Fatal(err.Error())
+			}
+			defer f.Close()
+
+			time.Sleep(5 * time.Second)
+		}
+	},
 }
+
+var rootViper *viper.Viper
 
 var heartbit = lipgloss.NewStyle().Foreground(charmtone.Hazy).SetString(`
   ___   __   __     __   __ _   ___  __      ____   ___  __  ____  ____ 
@@ -91,6 +140,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&debugInCISyncFile, "debugcisyncfile", "", "ci sync file")
 	rootCmd.PersistentFlags().StringVar(&cwd, "cwd", "", "Current working directory")
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", "", "Custom crush data directory")
+	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "配置文件路径 (默认为 ./config/default.yaml)")
 	rootCmd.Flags().BoolVar(&help, "help", false, "Help")
 	assert.MustCall1E(viper.BindPFlags, rootCmd.PersistentFlags(), "viper 隐藏失败")
 }
@@ -103,6 +153,13 @@ func setupAppWithProgressBar(cmd *cobra.Command) error {
 	return nil
 }
 
-func setupApp(cmd *cobra.Command) (*app.App, error) {
-	return app.New(cmd.Context(), nil, nil)
+func setupDebug(cnf *logger.Config) {
+	if debug {
+		cnf.Level = "debug"
+		cnf.Console = true
+		cnf.EnableStacktrace = true
+		cnf.EnableCaller = true
+	}
+
+	return
 }

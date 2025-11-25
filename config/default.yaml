@@ -1,0 +1,15 @@
+# 日志配置
+logger:
+  service_name: "golangci-scope"
+  environment: "dev"
+  log_level: "info"
+  console: true
+  file: true
+  file_path: "./logs"
+  file_name: "default.log"
+  max_size: 100
+  max_age: 30
+  max_backups: 10
+  compress: true
+  enable_caller: true
+  enable_stacktrace: true
